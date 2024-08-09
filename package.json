@@ -1,0 +1,29 @@
+{
+    "name": "meetx",
+    "version": "1.0.0",
+    "description": "",
+    "main": "server.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "lint": "eslint",
+        "nodemon": "nodemon --exec babel-node",
+        "start": "npm run nodemon"
+    },
+    "author": "SHEFOO10",
+    "license": "ISC",
+    "dependencies": {
+        "connect-redis": "^7.1.1",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "express-session": "^1.18.0",
+        "redis": "^4.7.0"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.25.2",
+        "@babel/node": "^7.25.0",
+        "@babel/preset-env": "^7.25.3",
+        "eslint": "^9.8.0",
+        "eslint-plugin-react": "^7.35.0",
+        "nodemon": "^3.1.4"
+    }
+}

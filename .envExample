@@ -1,0 +1,7 @@
+PORT="<The port where server run on it>"
+SESSION_SECRET="< Pick random value : hash something>"
+DB_HOST="<Hostname of your mongodb server>"
+DB_PORT="<Port of your mongo server (default 27017)"
+DB_DATABASE="<Database Name>"
+GOOGLE_CLIENT_ID="<Your-Google-ClientId>"
+GOOGLE_CLIENT_SECRET="<Your-Google-SECRET>"
