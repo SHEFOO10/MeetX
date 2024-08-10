@@ -10,8 +10,12 @@ function badRequest(response, message) {
   return response.status(400).send({error: message});
 }
 
-function notFound(response) {
-  return response.status(404).send({error: 'NotFound'});
+function notFound(response, message = 'NotFound') {
+  return response.status(404).send({error: message});
+} 
+
+function serverError(response, message = 'ServerError') {
+  return response.status(500).send({error: message});
 }
 
 
@@ -20,4 +24,5 @@ export {
   Unauthorized,
   badRequest,
   notFound,
+  serverError,
 };
