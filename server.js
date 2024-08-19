@@ -7,6 +7,12 @@ import dotenv from 'dotenv';
 import routes from './routes';
 import RedisClient from './utils/redis';
 import { checkDB, checkRedis } from './utils/helper';
+import path from 'path';
+import http from 'http';
+import bodyParser from 'body-parser';
+import signaling from './signaling';
+
+const __dirname = path.resolve();
 
 dotenv.config();
 
@@ -16,12 +22,22 @@ const {
 } = process.env;
 
 const app = express();
+const httpServer = http.createServer(app);
+const socket = signaling(httpServer);
 
+app.set('view engine', 'ejs');
+
+app.use(bodyParser.json());
+
+//support parsing of application/x-www-form-urlencoded post data
+app.use(bodyParser.urlencoded({ extended: false }));
 // Middleware to handle Redis connection errors
 app.use(checkRedis);
 
 // Middleware to handle MongoDB connection errors
 app.use(checkDB);
+
+app.use(express.static(path.join(__dirname, '/public')));
 
 (async () => {
   try {
@@ -34,7 +50,7 @@ app.use(checkDB);
         prefix: "meetX:",
       }),
       secret: SESSION_SECRET, // Replace with a secure secret
-      cookie: { secure: true }, // Ensure HTTPS is used, or set to false during development
+      cookie: { secure: false }, // Ensure HTTPS is used, or set to false during development
       resave: false,
       saveUninitialized: false
     }));
@@ -47,6 +63,7 @@ app.use(checkDB);
     app.use(routes);
 
     app.get('/', (req, res) => {
+      console.log(req.isAuthenticated())
       return res.status(200).send({ status: 'All Good' });
     });
   
@@ -56,7 +73,7 @@ app.use(checkDB);
     console.error("Error during server initialization:", error);
   }
 })();
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
