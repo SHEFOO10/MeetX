@@ -3,12 +3,12 @@ import meetingController from '../controllers/meetingController';
 
 const Router = express.Router();
 
-Router.post('/meetings/:id/join', meetingController.joinMeeting);
-Router.post('/meetings/:id/end', meetingController.endMeeting);
+Router.get('/meetings/:id/join', meetingController.joinMeeting);
+Router.get('/meetings/:id/end', meetingController.endMeeting);
 
 Router.get('/meetings/:id', meetingController.MeetingDetails);
 
 Router.post('/meetings', meetingController.newMeeting);
-
+Router.get('/meetings', meetingController.CreateMeeting)
 
 export default Router;
