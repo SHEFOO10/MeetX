@@ -1,0 +1,23 @@
+body, html {
+    margin: 0;
+    padding: 0;
+}
+
+#container {
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    place-items: center;
+}
+
+#profile {
+    border: 2px solid black;
+    padding-inline: auto;
+    display: flex;
+    justify-content: center;
+    flex-flow: column;
+}
+
+#profileImg {
+    border-radius: 50%;
+}
