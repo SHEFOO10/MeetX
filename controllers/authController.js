@@ -16,18 +16,23 @@ class authController {
   }
 
   static loggedIn(request, response) {
-    return NotImplemented(response);
+    return response.redirect('/profile');
   }
 
-  static logOut(request, response) {
-    request.logout((err) => {
-      if (err) { 
-        return next(err); 
-      }
-      req.session.destroy(); // Optionally destroy the session
-      return res.redirect('/'); // Redirect to the homepage or login page
+  static logOut(req, res) {
+    req.logout(function(err) {
+      if (err) { return next(err); }
+      res.redirect('/');
     });
   }
+
+  static profile(request, response) {
+    if (!request.isAuthenticated())
+      return response.redirect('/');
+
+    return response.render('profile', {user: request.user});
+  }
+
 }
 
 export default authController;
