@@ -11,4 +11,9 @@ Router.get('/meetings/:id', meetingController.MeetingDetails);
 Router.post('/meetings', meetingController.newMeeting);
 Router.get('/meetings', meetingController.CreateMeeting)
 
+
+Router.get('/join-room', (req, res) => {
+    return res.render('page');
+})
+
 export default Router;

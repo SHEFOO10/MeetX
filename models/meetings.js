@@ -12,7 +12,7 @@ const meetingSchema = new mongoose.Schema({
   },
   host: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // Assuming you have a User model
+    ref: 'User',
     required: true
   },
   participants: [{
@@ -26,8 +26,27 @@ const meetingSchema = new mongoose.Schema({
   endTime: {
     type: Date,
     required: true
-  }
+  },
+  producers: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    kind: {
+      type: String, // e.g., 'audio', 'video', 'data'
+      required: true
+    },
+    producerId: {
+      type: String, // The ID assigned by Mediasoup for this producer
+      required: true
+    },
+    transportId: {
+      type: String, // The transport ID used by this producer
+      required: true
+    }
+  }]
 });
+
 
 // Create and export the model
 const Meeting = mongoose.model('Meeting', meetingSchema);

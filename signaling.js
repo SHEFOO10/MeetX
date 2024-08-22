@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+import { handlePeerConnection, handlePeerDisconnection } from './utils/manageRooms';
 
 export default function signaling(server) {
   const io = new Server(server, {
@@ -33,6 +34,14 @@ export default function signaling(server) {
     socket.on('disconnect', () => {
       console.log('A user disconnected:', socket.id);
     });
+
+    socket.on('join-room', async (roomId) => {
+        await handlePeerConnection(peerId, roomId);
+    })
+    socket.on('room-leave', (roomId) => {
+      handlePeerDisconnection(peerId, roomId);
+    });
+    
   });
 
   return io;

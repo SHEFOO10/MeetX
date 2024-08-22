@@ -2,7 +2,7 @@ import express from 'express';
 import passport from 'passport';
 import session from 'express-session';
 import RedisStore from 'connect-redis';
-import passportConfig from './auth/passport'
+import './auth/passport'
 import dotenv from 'dotenv';
 import routes from './routes';
 import RedisClient from './utils/redis';

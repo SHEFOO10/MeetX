@@ -12,6 +12,8 @@
         socket.on('connect', () => {
             console.log('connected to the socket server');
         })
+
+        socket.emit('join-room', 2);
     </script>
 </body>
 </html>
