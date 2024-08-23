@@ -13,7 +13,7 @@ Router.get('/meetings', meetingController.CreateMeeting)
 
 
 Router.get('/join-room', (req, res) => {
-    return res.render('page');
+    return res.render('newMeeting');
 })
 
 export default Router;

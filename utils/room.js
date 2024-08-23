@@ -22,6 +22,9 @@ class Room {
             kind: 'video',
             mimeType: 'video/VP8',
             clockRate: 90000,
+            parameters: {
+              'x-google-start-bitrate': 1000,
+            },
           },
         ],
       });
@@ -29,7 +32,9 @@ class Room {
   
     async createWebRtcTransport() {
       const transport = await this.router.createWebRtcTransport({
-        listenIps: [{ ip: '0.0.0.0', announcedIp: 'YOUR_PUBLIC_IP' }], // Replace with your server's public IP
+        listenIps: [{ ip: '0.0.0.0',
+           announcedIp: 'upgraded-space-happiness-x4xvp9q7v9r2997j-5000.app.github.dev'
+           }], // Replace with your server's public IP
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
@@ -39,7 +44,7 @@ class Room {
     }
   
     addPeer(peerId) {
-      this.peers.set(peerId, { transports: [], producers: [], consumers: [] });
+      this.peers.set(peerId, { transports: {}, producers: [], consumers: [] });
     }
   
     removePeer(peerId) {
