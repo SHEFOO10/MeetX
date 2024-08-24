@@ -25,7 +25,7 @@
   </head>
   <body>
         <input type="hidden" id="roomId" value=<%= roomId %>>
-        <!-- <h1><%= roomId %></h1> -->
+        <input type="hidden" id="userType" value="producer">
         <div id="video">
             <table>
                 <thead>
@@ -38,43 +38,15 @@
                                 <video id="localVideo" autoplay class="video" playsinline></video>
                             </div>
                         </td>
-                        <!-- <td>
-                            <div id="sharedBtns">
-                                <video id="remoteVideo" autoplay class="video" playsinline></video>
-                            </div>
-                        </td> -->
                     </tr>
                     <tr>
                         <td>
                             <div id="sharedBtns">
-                                <button id="btnLocalVideo">1. Get Local Video</button>
+                                <button id="callBtn">Start Call</button>
                             </div>
                         </td>
                     </tr>
-                    <tr>
-                        <td colspan="2">
-                            <div id="sharedBtns">
-                                <button id="btnRtpCapabilities">2. Get Rtp Capabilities</button>
-                                <br />
-                                <button id="btnDevice">3. Create Device</button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div id="sharedBtns">
-                                <button id="btnCreateSendTransport">4. Create Send Transport</button>
-                                <br />
-                                <button id="btnConnectSendTransport">5. Connect Send Transport & Produce</button></td>
-                            </div>
-                        <!-- <td>
-                            <div id="sharedBtns">
-                                <button id="btnRecvSendTransport">6. Create Recv Transport</button>
-                                <br />
-                                <button id="btnConnectRecvTransport">7. Connect Recv Transport & Consume</button>
-                            </div>
-                        </td> -->
-                    </tr>
+        
                 </tbody>
             </table>
         </div>

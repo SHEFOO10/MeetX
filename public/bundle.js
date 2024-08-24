@@ -22939,8 +22939,10 @@ const socket = io("/mediasoup");
 
 
 const roomInput = document.getElementById('roomId');
-console.log(roomInput.value);
+console.log('room Id:', roomInput.value);
 
+const userType = document.getElementById('userType').value;
+console.log(userType)
 
 socket.emit('join-room', roomInput.value)
 
@@ -23000,6 +23002,7 @@ const getRtpCapabilities = async () => {
   socket.emit("getRouterRtpCapabilities", (rtpCapabilities) => {
     console.log("Router RTP Capabilities:", rtpCapabilities);
     routerRtpCapabilities = rtpCapabilities;
+    createDevice();
   });
 };
 
@@ -23009,6 +23012,12 @@ const createDevice = async () => {
   await device.load({ routerRtpCapabilities });
   console.log('Device capabilites: ', device.rtpCapabilities);
 
+  if (userType === 'producer') {
+    await getLocalStream(); 
+    await createSendTransport()
+  } else if (userType === 'consumer') {
+    await createRecvTransport();
+  }
   return device;
 };
 
@@ -23028,6 +23037,7 @@ const createSendTransport = async () => {
     producerTransport.on(
       "connect",
       async ({ dtlsParameters }, callback, errback) => {
+        console.log('DTLS Paramters:', dtlsParameters)
         try {
           const roomId = roomInput.value;
           await socket.emit("transport-connect", {
@@ -23066,6 +23076,8 @@ const createSendTransport = async () => {
         }
       }
     );
+
+    connectSendTransport();
 });
 };
 
@@ -23105,6 +23117,8 @@ const createRecvTransport = async () => {
                 errback(error);
             }
         });
+
+        connectRecvTransport();
     });
 };
 
@@ -23143,21 +23157,13 @@ const connectRecvTransport = async () => {
 };
 
 
-const btnLocalVideo = document.getElementById('btnLocalVideo');
-btnLocalVideo?.addEventListener("click", getLocalStream);
+async function init() {
+  await getRtpCapabilities();
+}
 
-btnRtpCapabilities.addEventListener("click", getRtpCapabilities);
-btnDevice.addEventListener("click", createDevice);
+const callBtn = document.getElementById('callBtn');
+callBtn.addEventListener('click', async () => {
+  await init()
+})
 
-const btnCreateSendTransport = document.getElementById('btnCreateSendTransport');
-btnCreateSendTransport?.addEventListener("click", createSendTransport);
-
-const btnConnectSendTransport = document.getElementById('btnConnectSendTransport')
-btnConnectSendTransport?.addEventListener("click", connectSendTransport);
-
-const btnRecvSendTransport = document.getElementById('btnRecvSendTransport');
-btnRecvSendTransport?.addEventListener('click', createRecvTransport);
-
-const btnConnectRecvTransport = document.getElementById('btnConnectRecvTransport');
-btnConnectRecvTransport?.addEventListener('click', connectRecvTransport);
 },{"mediasoup-client":62,"socket.io-client":76}]},{},[85]);
