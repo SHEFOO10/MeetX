@@ -3,6 +3,13 @@ const mediasoupClient = require("mediasoup-client");
 
 const socket = io("/mediasoup");
 
+
+const roomInput = document.getElementById('roomId');
+console.log(roomInput.value);
+
+
+socket.emit('join-room', roomInput.value)
+
 socket.on("connection-success", ({ socketId }) => {
   console.log('Socket id: ', socketId);
 });
@@ -39,9 +46,10 @@ let params = {
 const streamSuccess = (stream) => {
   localVideo.srcObject = stream;
   const track = stream.getVideoTracks()[0];
-  params = { track, ...params };
+  videoParams = { track, ...params };
 };
 
+// Producer flow: 0. get the stream
 const getLocalStream = async () => {
   let localStream;
   try {
@@ -52,6 +60,16 @@ const getLocalStream = async () => {
   streamSuccess(localStream)
 };
 
+
+// Producer/ Consumer flow: 1. get rtpCapabilities from the server
+const getRtpCapabilities = async () => {
+  socket.emit("getRouterRtpCapabilities", (rtpCapabilities) => {
+    console.log("Router RTP Capabilities:", rtpCapabilities);
+    routerRtpCapabilities = rtpCapabilities;
+  });
+};
+
+// Producer/ Consumer flow: 2. create and load the device with rtpCapabilities
 const createDevice = async () => {
   device = new mediasoupClient.Device();
   await device.load({ routerRtpCapabilities });
@@ -60,28 +78,28 @@ const createDevice = async () => {
   return device;
 };
 
-const getRtpCapabilities = async () => {
-  socket.emit("getRouterRtpCapabilities", (rtpCapabilities) => {
-    console.log("Router RTP Capabilities:", rtpCapabilities);
-    routerRtpCapabilities = rtpCapabilities;
-  });
-};
 
+// Producer flow: 3. send createWebRtcTransport to create
+//  webrtc transport on the server and with the returned parameters create sendTransport
 const createSendTransport = async () => {
-  socket.emit("createWebRtcTransport", { sender: true }, async ({ params }) => {
+  socket.emit("createWebRtcTransport", { sender: true, roomId: roomInput.value }, async ({ params }) => {
     if (params.error) {
       console.error(params.error);
       return;
     }
     console.log('Web Rtc params: ', params);
     producerTransport = device.createSendTransport(params);
-
+  
+    // after produce method called 'connect' event will be triggered
     producerTransport.on(
       "connect",
       async ({ dtlsParameters }, callback, errback) => {
         try {
+          const roomId = roomInput.value;
           await socket.emit("transport-connect", {
             dtlsParameters,
+            peerId: socket.id,
+            roomId
           });
           callback();
         } catch (error) {
@@ -91,6 +109,7 @@ const createSendTransport = async () => {
       }
     );
 
+    // then 'produce' event will be triggered
     producerTransport.on(
       "produce",
       async ({ kind, rtpParameters }, callback, errback) => {
@@ -100,6 +119,8 @@ const createSendTransport = async () => {
             {
               kind,
               rtpParameters,
+              peerId: socket.id,
+              roomId: roomInput.value
             },
             ({ id }) => {
               callback({ id });
@@ -114,8 +135,9 @@ const createSendTransport = async () => {
 });
 };
 
+// this function will triggers connect and produce events 
 const connectSendTransport = async () => {
-  producer = await producerTransport.produce(params);
+  producer = await producerTransport.produce(videoParams);
   producer.on("trackended", () => {
     console.log("Track ended");
   });
@@ -124,8 +146,11 @@ const connectSendTransport = async () => {
   });
 };
 
+
+// Consumer flow: 3. create webrtc transport on the server
+//    and create recvTransport on client with parameters of server webrtc transport
 const createRecvTransport = async () => {
-    await socket.emit("createWebRtcTransport", { sender: false }, async ({ params }) => {
+    await socket.emit("createWebRtcTransport", { sender: false, roomId: roomInput.value }, async ({ params }) => {
         if (params.error) {
         console.error(params.error);
         return;
@@ -134,7 +159,12 @@ const createRecvTransport = async () => {
         consumerTransport = device.createRecvTransport(params);
         consumerTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
             try {
-                await socket.emit('transport-recv-connect', { dtlsParameters });
+                await socket.emit('transport-recv-connect',
+                  {
+                    dtlsParameters,
+                    roomId: roomInput.value,
+                    peerId: socket.id
+                   });
                 callback();
             } catch (error) {
                 console.error(error);
@@ -144,14 +174,22 @@ const createRecvTransport = async () => {
     });
 };
 
+// this will sent consume event to the server
+//    first i will check if the user can consume
+//    and if he can consumer object will be returned
+//    and consumer parameters will be sent to the client (which is here)
 const connectRecvTransport = async () => {
     await socket.emit('consume', {
         rtpCapabilities: device.rtpCapabilities,
+        roomId: roomInput.value,
+        peerId: socket.id,
+
     }, async ({ params }) => {
         if (params.error) {
             console.error('Cannot consume');
             return;
         }
+        console.log('Consuming')
         console.log('consume params: ', params);
         consumer = await consumerTransport.consume({
             id: params.id,
@@ -170,10 +208,21 @@ const connectRecvTransport = async () => {
     });
 };
 
-btnLocalVideo.addEventListener("click", getLocalStream);
+
+const btnLocalVideo = document.getElementById('btnLocalVideo');
+btnLocalVideo?.addEventListener("click", getLocalStream);
+
 btnRtpCapabilities.addEventListener("click", getRtpCapabilities);
 btnDevice.addEventListener("click", createDevice);
-btnCreateSendTransport.addEventListener("click", createSendTransport);
-btnConnectSendTransport.addEventListener("click", connectSendTransport);
-btnRecvSendTransport.addEventListener('click', createRecvTransport);
-btnConnectRecvTransport.addEventListener('click', connectRecvTransport);
+
+const btnCreateSendTransport = document.getElementById('btnCreateSendTransport');
+btnCreateSendTransport?.addEventListener("click", createSendTransport);
+
+const btnConnectSendTransport = document.getElementById('btnConnectSendTransport')
+btnConnectSendTransport?.addEventListener("click", connectSendTransport);
+
+const btnRecvSendTransport = document.getElementById('btnRecvSendTransport');
+btnRecvSendTransport?.addEventListener('click', createRecvTransport);
+
+const btnConnectRecvTransport = document.getElementById('btnConnectRecvTransport');
+btnConnectRecvTransport?.addEventListener('click', connectRecvTransport);

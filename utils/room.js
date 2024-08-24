@@ -6,6 +6,7 @@ class Room {
       this.worker = worker;
       this.router = null;
       this.peers = new Map(); // Store peers connected to this room
+      this.producers = [];
     }
   
     async init() {
@@ -54,6 +55,11 @@ class Room {
     getPeer(peerId) {
       return this.peers.get(peerId);
     }
+
+    getProducers() {
+      return this.producers;
+    }
+  
   }
   
   export default Room;

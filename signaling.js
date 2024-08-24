@@ -1,6 +1,6 @@
 import { Server } from 'socket.io';
 import * as mediasoup from 'mediasoup'
-// import manageRooms from './utils/manageRooms';
+import manageRooms from './utils/manageRooms';
 
 export default function signaling(server) {
   const io = new Server(server, {
@@ -12,37 +12,6 @@ export default function signaling(server) {
 
   io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
-
-    // Handle offer
-    socket.on('offer', (data) => {
-      const { target, offer } = data;
-      socket.to(target).emit('offer', { sender: socket.id, offer });
-    });
-
-    // Handle answer
-    socket.on('answer', (data) => {
-      const { target, answer } = data;
-      socket.to(target).emit('answer', { sender: socket.id, answer });
-    });
-
-    // Handle ICE candidates
-    socket.on('ice-candidate', (data) => {
-      const { target, candidate } = data;
-      socket.to(target).emit('ice-candidate', { sender: socket.id, candidate });
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('A user disconnected:', socket.id);
-    });
-
-    // socket.on('join-room', async (roomId) => {
-    //     await manageRooms.handlePeerConnection(1, roomId);
-    // })
-    // socket.on('room-leave', (roomId) => {
-    //   manageRooms.handlePeerDisconnection(1, roomId);
-    // });
-    
   });
 
 
@@ -51,9 +20,6 @@ export default function signaling(server) {
   let router;
   let producerTransport;
   let consumerTransport;
-  let producer;
-  let consumer;
-  
   
   const createWorker = async () => {
       worker = await mediasoup.createWorker({
@@ -89,13 +55,14 @@ export default function signaling(server) {
       },
   ];
   
+  // create webrtc Transport on the server
   const createWebRtcTransport = async (callback) => {
       try {
           const webRtcOptions = {
               listenIps: [
                   {
                       ip: '0.0.0.0',
-                      announcedIp: '20.103.221.187',
+                      announcedIp: '20.103.221.187', // don't forget to change this ip to the server ip
                   }],
                   enableUdp: true,
                   enableTcp: true,
@@ -113,6 +80,8 @@ export default function signaling(server) {
           transport.on('close', () => {
               console.log('WebRtcTransport closed');
           });
+
+          // sending transport parameters to the client side
           callback({ params: { 
               id: transport.id,
               iceParameters: transport.iceParameters,
@@ -150,27 +119,45 @@ export default function signaling(server) {
     });
 
 
+    // handle createWebRtcTransport event and return transport parameters to the client side
+    socket.on('createWebRtcTransport',  async ({sender, roomId}, callback) => {
+        console.log(`Is this a sender request? ${sender} and roomid: ${roomId}`);
 
-    socket.on('createWebRtcTransport',  async ({sender}, callback) => {
-        console.log(`Is this a sender request? ${sender}`);
         if (sender) {
-            producerTransport = await createWebRtcTransport(callback);
+            await manageRooms.handlePeerConnection(socket.id, roomId, 'producer', callback);
         } else {
-            consumerTransport = await createWebRtcTransport(callback);
+            await manageRooms.handlePeerConnection(socket.id, roomId, 'consumer', callback);
         }
+        // console.log(room.peers);
+        // console.log(room.peers.get(socket.id))
+        // console.log(room.getPeer(socket.id).transports) 
+        // rooms.forEach(room => console.log(room))
+        // console.log('Consumers:',consumers)
+        // console.log('Producers:', producers)
     });
 
-    socket.on('transport-connect', async ({ dtlsParameters }) => {
-        await producerTransport.connect({ dtlsParameters });
+    // when connect event is triggered on the client side it will send dtls parameters and we connect
+    socket.on('transport-connect', async ({ dtlsParameters, peerId, roomId }) => {
+        const room = await manageRooms.getOrCreateRoom(roomId);
+        const producerPeer = room.getPeer(peerId);
+        // console.log(producerPeer)
+        await producerPeer.transports.sendTransport.connect({dtlsParameters});
     });
 
-    socket.on('transport-produce', async ({ kind, rtpParameters, appData }, callback) => {
-        producer = await producerTransport.produce({
+    // after connecting client side will send this parameters and server will call produce method with them
+    // and return producer id to the client side
+    socket.on('transport-produce', async ({ kind, rtpParameters, peerId, roomId }, callback) => {
+        const room = await manageRooms.getOrCreateRoom(roomId);
+        // console.log(room.getPeer(peerId));
+        const producerPeer = room.getPeer(peerId);
+        const producerTransport = producerPeer.transports.sendTransport;
+        const producer = await producerTransport.produce({
             kind,
             rtpParameters,
         });
 
         console.log(`Producer id: ${producer.id}`);
+        room.producers.push({id: producer.id, producerPeer})
         producer.on('transportclose', () => {
             console.log('Producer Transport closed');
             producer.close();
@@ -179,18 +166,33 @@ export default function signaling(server) {
         callback({ id: producer.id });
     });
 
-    socket.on('transport-recv-connect', async ({ dtlsParameters }) => {
-            await consumerTransport.connect({ dtlsParameters });
+
+    // after we check that the user can consume he will send dtls parameters
+    // from connect event on recvTransport which is triggered by consume in client side
+    socket.on('transport-recv-connect', async ({ dtlsParameters, roomId, peerId }) => {
+        const room = await manageRooms.getOrCreateRoom(roomId);
+        const consumerTransport = room.getPeer(peerId).transports.recvTransport;
+        await consumerTransport.connect({ dtlsParameters });
     });
 
 
-    socket.on('consume', async ({ rtpCapabilities }, callback) => {
+    // check if the user can consume, call consume method and return consumer parameters
+    // to the client side to call consume with them 
+    socket.on('consume', async ({ rtpCapabilities, roomId, peerId, producerId}, callback) => {
+        const room = await manageRooms.getOrCreateRoom(roomId);
+        const consumerTransport = room.getPeer(peerId).transports.recvTransport;
+        const producer = room.getProducers()[0];
+
+        console.log(room.router.canConsume({
+            producerId: producer.id,
+            rtpCapabilities,
+        }))
         try {
-            if (router.canConsume({
+            if (room.router.canConsume({
                 producerId: producer.id,
                 rtpCapabilities,
             })) {
-                consumer = await consumerTransport.consume({
+                const consumer = await consumerTransport.consume({
                     producerId: producer.id,
                     rtpCapabilities,
                     paused: true,
@@ -211,6 +213,17 @@ export default function signaling(server) {
                     rtpParameters: consumer.rtpParameters,
                 }
                 callback({ params });
+            
+            
+                // we paused the stream when consume process after everything is right
+                // we sent event to resume the stream
+                socket.on('consumer-resume', async () => {
+                    await consumer.resume();
+                });
+            
+            }
+            else {
+                console.log('can\'t consume')
             }
         } catch (error) {
             console.error(error);
@@ -218,8 +231,12 @@ export default function signaling(server) {
         }
     });
 
-    socket.on('consumer-resume', async () => {
-        await consumer.resume();
+
+
+
+    // recieve room id
+    socket.on('join-room', (roomId) => {
+        console.log(roomId);
     });
   })
 
