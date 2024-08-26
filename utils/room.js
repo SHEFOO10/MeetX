@@ -75,7 +75,7 @@ class Room {
       producer.consumerId = consumerId;
     }
     getConsumerById(consumerId) {
-      console.log('getConsumerById consumers:', this.consumers)
+      // console.log('getConsumerById consumers:', this.consumers)
       return this.consumers.find(consumer => {
         return consumer.id === consumerId
       })
@@ -97,6 +97,34 @@ class Room {
       return this.producers;
     }
 
+    
+    getConsumers() {
+      return this.consumers;
+    }
+
+    removeProducer(producerId) {
+      this.producers = this.producers.filter(producer => {
+        return producer.id !== producerId;
+      })
+    }
+
+    removeProducersIfClientDisconnected(serverSocket, socketId) {
+      this.producers = this.producers.filter(producer => {
+        this.consumers = this.consumers.filter(consumer => {
+          if (producer.id === consumer.producerId)
+            serverSocket.to(consumer.socketId).emit('producerOfConsumerClosed', { consumerId: consumer.id })
+          return consumer.producerId !== producer.id;
+        })
+        return producer.socketId !== socketId;
+      })
+    }
+
+    removeConsumersIfClientDisconnected(socketId) {
+      this.consumers = this.consumers.filter(consumer => {
+        return consumer.socketId !== socketId;
+      })
+    }
+
     addNewConsumerToRoom(consumer, consumerTransport, socketId, producerId) {
       this.consumers.push({
         id: consumer.id,
@@ -107,9 +135,10 @@ class Room {
       })
     }
 
-    addNewProducerToRoom(producerId, producerTransport, socketId) {
+    addNewProducerToRoom(producer, producerTransport, socketId) {
       this.producers.push({
-        id: producerId,
+        id: producer.id,
+        producer,
         producerTransport,
         socketId
       })

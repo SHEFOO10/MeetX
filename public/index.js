@@ -3,13 +3,13 @@ const mediasoupClient = require("mediasoup-client");
 
 const socket = io("/mediasoup");
 
-
 const clientRoomId = document.getElementById('roomId').value;
 const videoContainer = document.getElementById('videoContainer');
 
 
-socket.on("connection-success", ({ socketId }) => {
+socket.on("connection-success", ({ socketId }, callback) => {
   console.log('Socket id: ', socketId);
+  callback(clientRoomId);
 });
 
 socket.on('NewProducerJoined', ({id, socketId}) => {
@@ -20,7 +20,11 @@ socket.on('NewProducerJoined', ({id, socketId}) => {
 
 let device;
 let producer;
+let clientProducerId;
 let producerTransport;
+
+let videoParams;
+let audioParams;
 
 let routerRtpCapabilities;
 let consumers = [];
@@ -57,8 +61,10 @@ function AddConsumer(consumer, consumerTransport, socketId, roomId) {
 
 const streamSuccess = (stream) => {
   localVideo.srcObject = stream;
-  const track = stream.getVideoTracks()[0];
-  videoParams = { track, ...params };
+  const videoTrack = stream.getVideoTracks()[0];
+  const audioTrack = stream.getAudioTracks()[0];
+  videoParams = { track: videoTrack, ...params };
+  audioParams = { track: audioTrack }
 };
 
 // Producer flow: 0. get the stream
@@ -152,7 +158,7 @@ const createSendTransport = async () => {
             },
             ({ id, producersExists }) => {
               callback({ id });
-              
+              clientProducerId = id;
               socket.emit('NewProducerJoined', {id})
               if (producersExists) {
                 getProducers().then(producers => {
@@ -177,6 +183,7 @@ const createSendTransport = async () => {
 // this function will triggers connect and produce events 
 const connectSendTransport = async () => {
   producer = await producerTransport.produce(videoParams);
+  console.log(audioParams.track)
   producer.on("trackended", () => {
     console.log("Track ended");
   });
@@ -246,6 +253,7 @@ const connectRecvTransport = async (consumerTransport, producerId, clientConsume
         const { track } = consumer;
         console.log('Track Recieved: ', track);
         const video = document.createElement('video');
+        video.id = consumer.id;
         video.style = 'background-color: black;'
         video.autoplay = true;
         video.playsInline = true;
@@ -263,12 +271,26 @@ async function init() {
   await getRtpCapabilities();
 }
 
+socket.on('privateEvent', (messsage) => {
+  console.log('Private Event message arrived:', messsage)
+})
+
+socket.on('producerOfConsumerClosed', ({consumerId}) => {
+  consumers = consumers.filter(consumerData => {
+    return consumerData.consumer.id !== consumerId;
+  })
+  //removing video element
+  document.getElementById(consumerId).remove();
+})
+
+
 const endCallBtn = document.getElementById('endCallBtn');
 endCallBtn.addEventListener('click', async () => {
-if (producerTransport)
-  producerTransport.close()
-if (producer)
-  producer.close()
+  socket.emit('producerClosed', {clientRoomId, clientProducerId});
+// if (producerTransport)
+//   producerTransport.close()
+// if (producer)
+//   producer.close()
 })
 
 init();

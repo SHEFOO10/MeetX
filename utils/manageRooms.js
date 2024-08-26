@@ -23,6 +23,10 @@ async function getOrCreateRoom(roomId) {
   return rooms.get(roomId);
 }
 
+function getRoom(roomId) {
+  return rooms.get(roomId);
+}
+
 // Example of adding a peer to a room
 async function handlePeerConnection(peerId, roomId, type, callback) {
   const room = await getOrCreateRoom(roomId);
@@ -87,23 +91,8 @@ function handlePeerDisconnection(peerId, roomId) {
 }
 
 
-function addNewConsumer(consumerTransport, roomId, peerId) {
-  const room = rooms.get(roomId);
-  const producers = room.producers;
-  const peer = room.getPeer(peerId);
-
-  // set producer to producers on the consumer peer
-  // set the peer on consumers on the producer
-  producers.forEach(producer => {
-    // console.log(producer)
-    let producerPeer = producer.producerPeer;
-    producerPeer.consumers.push({peerId: consumerTransport})
-    peer.producers.push(producerPeer)
-  });  
-}
-
-
 export default {
+    getRoom,
     getOrCreateRoom,
     handlePeerConnection,
     handlePeerDisconnection,

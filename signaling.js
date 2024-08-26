@@ -57,11 +57,19 @@ export default function signaling(server) {
   const mediasoupsocket = io.of('/mediasoup');
 
   mediasoupsocket.on('connection', async (socket) => {
+    let clientRoomId;
     console.log(socket.id);
-    socket.emit('connection-success', { socketId: socket.id });
-    
-    socket.on('disconnect', () => {
+    socket.emit('connection-success', { socketId: socket.id }, (roomId) => {
+        clientRoomId = roomId
+    });
+    socket.on('disconnect', async () => {
         console.log('Client disconnected');
+        const room = manageRooms.getRoom(clientRoomId)
+        if (room) {
+            room.removeProducersIfClientDisconnected(mediasoupsocket, socket.id);
+            console.log(room.getProducers())
+            console.log(room.getConsumers())
+        }
     });
     
     socket.on('getRouterRtpCapabilities', async (callback) => {
@@ -108,8 +116,9 @@ export default function signaling(server) {
         });
 
         // add New Producer to the Room
-        room.addNewProducerToRoom(producer.id, producerTransport, socket.id)
+        room.addNewProducerToRoom(producer, producerTransport, socket.id)
         
+        console.log('New Producer Id:', producer.id)
         producer.on('transportclose', () => {
             console.log('Producer Transport closed');
             producer.close();
@@ -125,7 +134,6 @@ export default function signaling(server) {
         const room = await manageRooms.getOrCreateRoom(roomId);
         const socketId = peerId;
         console.log(`socketid: ${socketId}, producerId: ${producerId}`)
-        console.log('connect event: => consumerTransport:', )
         const consumerTransport = room.getPeerConsumerByProducerId(socketId, producerId).consumerTransport;
         await consumerTransport.connect({ dtlsParameters });
     });
@@ -154,6 +162,7 @@ export default function signaling(server) {
                 });
                 consumer.on('producerclose', () => {
                     console.log('producer of consumer closed');
+                    mediasoupsocket.to(socketId).emit('producerOfConsumerClosed', { consumerId: consumer.id });
                     consumer.close();
                 });
 
@@ -195,7 +204,7 @@ export default function signaling(server) {
 
     socket.on('NewProducerJoined', ({id}) => {
         socket.broadcast.emit('NewProducerJoined', {id, socketId: socket.id});
-    })
+    });
 
     socket.on('getProducers', async (roomId, callback) => {
         const room = await manageRooms.getOrCreateRoom(roomId);
@@ -204,6 +213,19 @@ export default function signaling(server) {
             return producer.id !== clientProducer.id;
         });
         callback(availableProducers)
+    });
+
+    socket.on('producerClosed', async ({clientRoomId, clientProducerId}) => {
+        console.log(clientRoomId)
+        const room = await manageRooms.getRoom(clientRoomId);
+        const producer = room.getProducerById(clientProducerId).producer;
+        // console.log(producer);
+        console.log('Closing Producer Id:', clientProducerId)
+        producer.close();
+        // const peer = room.getPeer(socket.id)
+        // console.log(peer.producers)
+        // const producer = room.getProducerById(producerId)
+        // console.log(producer);
     })
   })
 
