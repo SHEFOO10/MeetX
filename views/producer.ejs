@@ -15,6 +15,13 @@
             margin: 2;
         }
 
+        #videoContainer {
+            padding: 5;
+            background-color: papayawhip;
+            display: flex;
+            justify-content: center;
+        }
+
         #sharedBtns {
             padding: 5;
             background-color: papayawhip;
@@ -25,7 +32,6 @@
   </head>
   <body>
         <input type="hidden" id="roomId" value=<%= roomId %>>
-        <input type="hidden" id="userType" value="producer">
         <div id="video">
             <table>
                 <thead>
@@ -34,7 +40,7 @@
                 <tbody>
                     <tr>
                         <td>
-                            <div id="sharedBtns">
+                            <div id="videoContainer">
                                 <video id="localVideo" autoplay class="video" playsinline></video>
                             </div>
                         </td>
@@ -42,7 +48,7 @@
                     <tr>
                         <td>
                             <div id="sharedBtns">
-                                <button id="callBtn">Start Call</button>
+                                <button id="endCallBtn">End Call</button>
                             </div>
                         </td>
                     </tr>

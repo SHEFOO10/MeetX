@@ -28,6 +28,7 @@ async function handlePeerConnection(peerId, roomId, type, callback) {
   const room = await getOrCreateRoom(roomId);
   room.addPeer(peerId);
 
+  const socketId = peerId;
   let sendTransport;
   let recvTransport;
 
@@ -42,13 +43,19 @@ async function handlePeerConnection(peerId, roomId, type, callback) {
         preferUdp: true,
   }
 
-  if (type === 'producer')
+  if (type === 'producer') {
     sendTransport = await room.createWebRtcTransport(webRtcOptions);
-  else if (type === 'consumer')
+    room.peers.get(peerId).transports['sendTransport'] = sendTransport;
+  } else if (type === 'consumer') {
     recvTransport = await room.createWebRtcTransport(webRtcOptions);
+    room.peers.get(peerId).producers.push({
+      consumerId: null,
+      consumerTransport: recvTransport,
+      producerId: null,
+      socketId
+    });
+  }
 
-  room.peers.get(peerId).transports['sendTransport'] = sendTransport;
-  room.peers.get(peerId).transports['recvTransport'] = recvTransport;
 
   // console.log(room.peers.get(peerId))
   // You would then send the transport info to the client
@@ -59,7 +66,6 @@ async function handlePeerConnection(peerId, roomId, type, callback) {
       iceCandidates: sendTransport.iceCandidates,
       dtlsParameters: sendTransport.dtlsParameters,
    }});
-   addNewProducer(sendTransport, roomId, peerId)
   } else if (type === 'consumer') {
     callback({ params: { 
       id: recvTransport.id,
@@ -67,10 +73,9 @@ async function handlePeerConnection(peerId, roomId, type, callback) {
       iceCandidates: recvTransport.iceCandidates,
       dtlsParameters: recvTransport.dtlsParameters,
    }});
-   addNewConsumer(recvTransport, roomId, peerId)
   }
 
-  console.log(room.peers) 
+  // console.log('Manage Room.js:', room.peers) 
 }
 
 // Example of removing a peer from a room
@@ -81,20 +86,6 @@ function handlePeerDisconnection(peerId, roomId) {
   }
 }
 
-
-function addNewProducer(producerTransport, roomId, peerId) {
-  const room = rooms.get(roomId);
-  const peers = room.peers;
-  const producerPeer = room.getPeer(peerId);
-
-  for (const [key, value] of peers) {
-    // all peers except the one who produce, we will set the producer transport
-    // and set other peers on consumers on the producer
-    if (key !== peerId)
-      value.producers.push(producerTransport);
-  }
-
-}
 
 function addNewConsumer(consumerTransport, roomId, peerId) {
   const room = rooms.get(roomId);
@@ -116,6 +107,4 @@ export default {
     getOrCreateRoom,
     handlePeerConnection,
     handlePeerDisconnection,
-    addNewProducer,
-    addNewConsumer,
 };

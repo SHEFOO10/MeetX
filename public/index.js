@@ -4,23 +4,26 @@ const mediasoupClient = require("mediasoup-client");
 const socket = io("/mediasoup");
 
 
-const roomInput = document.getElementById('roomId');
-console.log('room Id:', roomInput.value);
+const clientRoomId = document.getElementById('roomId').value;
+const videoContainer = document.getElementById('videoContainer');
 
-const userType = document.getElementById('userType').value;
-console.log(userType)
-
-socket.emit('join-room', roomInput.value)
 
 socket.on("connection-success", ({ socketId }) => {
   console.log('Socket id: ', socketId);
 });
 
+socket.on('NewProducerJoined', ({id, socketId}) => {
+  if (socket.id !== socketId)
+    consumeProducer({id});
+})
+
+
 let device;
-let producerTransport;
-let routerRtpCapabilities;
 let producer;
-let consumer;
+let producerTransport;
+
+let routerRtpCapabilities;
+let consumers = [];
 
 let params = {
   encoding: [
@@ -44,6 +47,13 @@ let params = {
     videoGoogleStartBitrate: 1000,
   },
 };
+
+function AddConsumer(consumer, consumerTransport, socketId, roomId) {
+  consumers = [
+    ...consumers,
+    {socketId, consumer, consumerTransport, roomId}
+  ]
+}
 
 const streamSuccess = (stream) => {
   localVideo.srcObject = stream;
@@ -78,20 +88,27 @@ const createDevice = async () => {
   await device.load({ routerRtpCapabilities });
   console.log('Device capabilites: ', device.rtpCapabilities);
 
-  if (userType === 'producer') {
-    await getLocalStream(); 
-    await createSendTransport()
-  } else if (userType === 'consumer') {
-    await createRecvTransport();
-  }
+
+  await getLocalStream(); 
+  await createSendTransport()
+
   return device;
 };
 
 
+async function getProducers() {
+  return new Promise((resolve, reject) => {
+    socket.emit('getProducers', clientRoomId, (producers) => {
+      resolve(producers)
+    });
+
+  })
+}
+
 // Producer flow: 3. send createWebRtcTransport to create
 //  webrtc transport on the server and with the returned parameters create sendTransport
 const createSendTransport = async () => {
-  socket.emit("createWebRtcTransport", { sender: true, roomId: roomInput.value }, async ({ params }) => {
+  socket.emit("createWebRtcTransport", { consumer: false, roomId: clientRoomId }, async ({ params }) => {
     if (params.error) {
       console.error(params.error);
       return;
@@ -99,13 +116,14 @@ const createSendTransport = async () => {
     console.log('Web Rtc params: ', params);
     producerTransport = device.createSendTransport(params);
   
+
     // after produce method called 'connect' event will be triggered
     producerTransport.on(
       "connect",
       async ({ dtlsParameters }, callback, errback) => {
         console.log('DTLS Paramters:', dtlsParameters)
         try {
-          const roomId = roomInput.value;
+          const roomId = clientRoomId;
           await socket.emit("transport-connect", {
             dtlsParameters,
             peerId: socket.id,
@@ -130,10 +148,18 @@ const createSendTransport = async () => {
               kind,
               rtpParameters,
               peerId: socket.id,
-              roomId: roomInput.value
+              roomId: clientRoomId
             },
-            ({ id }) => {
+            ({ id, producersExists }) => {
               callback({ id });
+              
+              socket.emit('NewProducerJoined', {id})
+              if (producersExists) {
+                getProducers().then(producers => {
+                  producers.forEach(consumeProducer);
+                });
+              };
+
             }
           );
         } catch (error) {
@@ -143,6 +169,7 @@ const createSendTransport = async () => {
       }
     );
 
+    
     connectSendTransport();
 });
 };
@@ -161,21 +188,23 @@ const connectSendTransport = async () => {
 
 // Consumer flow: 3. create webrtc transport on the server
 //    and create recvTransport on client with parameters of server webrtc transport
-const createRecvTransport = async () => {
-    await socket.emit("createWebRtcTransport", { sender: false, roomId: roomInput.value }, async ({ params }) => {
+const consumeProducer = async (producer) => {
+    await socket.emit("createWebRtcTransport", { consumer: true, roomId: clientRoomId }, async ({ params }) => {
         if (params.error) {
         console.error(params.error);
         return;
         }
         console.log('Transport params: ', params);
-        consumerTransport = device.createRecvTransport(params);
+        const consumerTransport = device.createRecvTransport(params);
         consumerTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
             try {
+               console.log('producer:', producer)
                 await socket.emit('transport-recv-connect',
                   {
                     dtlsParameters,
-                    roomId: roomInput.value,
-                    peerId: socket.id
+                    roomId: clientRoomId,
+                    peerId: socket.id,
+                    producerId: producer.id
                    });
                 callback();
             } catch (error) {
@@ -184,7 +213,7 @@ const createRecvTransport = async () => {
             }
         });
 
-        connectRecvTransport();
+        connectRecvTransport(consumerTransport, producer.id);
     });
 };
 
@@ -192,12 +221,13 @@ const createRecvTransport = async () => {
 //    first i will check if the user can consume
 //    and if he can consumer object will be returned
 //    and consumer parameters will be sent to the client (which is here)
-const connectRecvTransport = async () => {
+const connectRecvTransport = async (consumerTransport, producerId, clientConsumerId) => {
     await socket.emit('consume', {
         rtpCapabilities: device.rtpCapabilities,
-        roomId: roomInput.value,
-        peerId: socket.id,
-
+        roomId: clientRoomId,
+        socketId: socket.id,
+        producerId,
+        clientConsumerId
     }, async ({ params }) => {
         if (params.error) {
             console.error('Cannot consume');
@@ -205,17 +235,23 @@ const connectRecvTransport = async () => {
         }
         console.log('Consuming')
         console.log('consume params: ', params);
-        consumer = await consumerTransport.consume({
+        const consumer = await consumerTransport.consume({
             id: params.id,
             producerId: params.producerId,
             kind: params.kind,
             rtpParameters: params.rtpParameters,
         });;
 
+        AddConsumer(consumer, consumerTransport, socket.id, clientRoomId)
         const { track } = consumer;
         console.log('Track Recieved: ', track);
-        remoteVideo.srcObject = new MediaStream([track]);
-        socket.emit('consumer-resume');
+        const video = document.createElement('video');
+        video.style = 'background-color: black;'
+        video.autoplay = true;
+        video.playsInline = true;
+        video.srcObject = new MediaStream([track]);
+        videoContainer.appendChild(video);
+        socket.emit('consumer-resume', consumer.id);
         consumer.on('transportclose', () => {
             console.log('Consumer Transport closed');
         });
@@ -227,7 +263,12 @@ async function init() {
   await getRtpCapabilities();
 }
 
-const callBtn = document.getElementById('callBtn');
-callBtn.addEventListener('click', async () => {
-  await init()
+const endCallBtn = document.getElementById('endCallBtn');
+endCallBtn.addEventListener('click', async () => {
+if (producerTransport)
+  producerTransport.close()
+if (producer)
+  producer.close()
 })
+
+init();

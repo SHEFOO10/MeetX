@@ -17,9 +17,6 @@ export default function signaling(server) {
 
 
   let worker;
-  let router;
-  let producerTransport;
-  let consumerTransport;
   
   const createWorker = async () => {
       worker = await mediasoup.createWorker({
@@ -55,52 +52,6 @@ export default function signaling(server) {
       },
   ];
   
-  // create webrtc Transport on the server
-  const createWebRtcTransport = async (callback) => {
-      try {
-          const webRtcOptions = {
-              listenIps: [
-                  {
-                      ip: '0.0.0.0',
-                      announcedIp: '20.103.221.187', // don't forget to change this ip to the server ip
-                  }],
-                  enableUdp: true,
-                  enableTcp: true,
-                  preferUdp: true,
-          }
-  
-          const transport = await router.createWebRtcTransport(webRtcOptions);
-          console.log(`WebRtcTransport created: ${transport.id}`);
-          transport.on('dtlsstatechange', (dtlsState) => {
-              if (dtlsState === 'closed') {
-                  console.log('WebRtcTransport closed');
-                  transport.close();
-              }
-          });
-          transport.on('close', () => {
-              console.log('WebRtcTransport closed');
-          });
-
-          // sending transport parameters to the client side
-          callback({ params: { 
-              id: transport.id,
-              iceParameters: transport.iceParameters,
-              iceCandidates: transport.iceCandidates,
-              dtlsParameters: transport.dtlsParameters,
-           } });
-           return transport;
-      } catch (error) {
-          console.error(error);
-          callback({ params: { error: error.message } });
-      }
-  };
-  
-  
-
-
-
-
-
 
 
   const mediasoupsocket = io.of('/mediasoup');
@@ -112,21 +63,22 @@ export default function signaling(server) {
     socket.on('disconnect', () => {
         console.log('Client disconnected');
     });
-    router = await worker.createRouter({ mediaCodecs });
     
-    socket.on('getRouterRtpCapabilities', (callback) => {
+    socket.on('getRouterRtpCapabilities', async (callback) => {
+        const router = await worker.createRouter({ mediaCodecs });
         callback(router.rtpCapabilities);
+        router.close()
     });
 
 
     // handle createWebRtcTransport event and return transport parameters to the client side
-    socket.on('createWebRtcTransport',  async ({sender, roomId}, callback) => {
-        console.log(`Is this a sender request? ${sender} and roomid: ${roomId}`);
+    socket.on('createWebRtcTransport',  async ({consumer, roomId}, callback) => {
+        console.log(`Is this a consumer request? ${consumer} and roomid: ${roomId}`);
 
-        if (sender) {
-            await manageRooms.handlePeerConnection(socket.id, roomId, 'producer', callback);
-        } else {
+        if (consumer) {
             await manageRooms.handlePeerConnection(socket.id, roomId, 'consumer', callback);
+        } else {
+            await manageRooms.handlePeerConnection(socket.id, roomId, 'producer', callback);
         }
         // console.log(room.peers);
         // console.log(room.peers.get(socket.id))
@@ -140,7 +92,6 @@ export default function signaling(server) {
     socket.on('transport-connect', async ({ dtlsParameters, peerId, roomId }) => {
         const room = await manageRooms.getOrCreateRoom(roomId);
         const producerPeer = room.getPeer(peerId);
-        // console.log(producerPeer)
         await producerPeer.transports.sendTransport.connect({dtlsParameters});
     });
 
@@ -156,44 +107,44 @@ export default function signaling(server) {
             rtpParameters,
         });
 
-        console.log(`Producer id: ${producer.id}`);
-        room.producers.push({id: producer.id, producerPeer})
+        // add New Producer to the Room
+        room.addNewProducerToRoom(producer.id, producerTransport, socket.id)
+        
         producer.on('transportclose', () => {
             console.log('Producer Transport closed');
             producer.close();
         });
 
-        callback({ id: producer.id });
+        callback({ id: producer.id, producersExists: room.producers.length > 1 ? true : false });
     });
 
 
     // after we check that the user can consume he will send dtls parameters
     // from connect event on recvTransport which is triggered by consume in client side
-    socket.on('transport-recv-connect', async ({ dtlsParameters, roomId, peerId }) => {
+    socket.on('transport-recv-connect', async ({ dtlsParameters, roomId, peerId, producerId }) => {
         const room = await manageRooms.getOrCreateRoom(roomId);
-        const consumerTransport = room.getPeer(peerId).transports.recvTransport;
+        const socketId = peerId;
+        console.log(`socketid: ${socketId}, producerId: ${producerId}`)
+        console.log('connect event: => consumerTransport:', )
+        const consumerTransport = room.getPeerConsumerByProducerId(socketId, producerId).consumerTransport;
         await consumerTransport.connect({ dtlsParameters });
     });
 
 
     // check if the user can consume, call consume method and return consumer parameters
     // to the client side to call consume with them 
-    socket.on('consume', async ({ rtpCapabilities, roomId, peerId, producerId}, callback) => {
+    socket.on('consume', async ({ rtpCapabilities, roomId, socketId, producerId}, callback) => {
         const room = await manageRooms.getOrCreateRoom(roomId);
-        const consumerTransport = room.getPeer(peerId).transports.recvTransport;
-        const producer = room.getProducers()[0];
-
-        console.log(room.router.canConsume({
-            producerId: producer.id,
-            rtpCapabilities,
-        }))
+        console.log('consume event: => consumerTransport:', room.getPeerRecentProducer(socketId))
+        const consumerTransport = room.getPeerRecentProducer(socketId).consumerTransport;
+    
         try {
             if (room.router.canConsume({
-                producerId: producer.id,
+                producerId,
                 rtpCapabilities,
             })) {
                 const consumer = await consumerTransport.consume({
-                    producerId: producer.id,
+                    producerId,
                     rtpCapabilities,
                     paused: true,
                 });
@@ -206,9 +157,11 @@ export default function signaling(server) {
                     consumer.close();
                 });
 
+                room.UpdateRecentProducer(socket.id, producerId, consumer.id)
+                room.addNewConsumerToRoom(consumer, consumerTransport, socket.id, producerId)
                 const params = {
                     id: consumer.id,
-                    producerId: producer.id,
+                    producerId,
                     kind: consumer.kind,
                     rtpParameters: consumer.rtpParameters,
                 }
@@ -217,7 +170,8 @@ export default function signaling(server) {
             
                 // we paused the stream when consume process after everything is right
                 // we sent event to resume the stream
-                socket.on('consumer-resume', async () => {
+                socket.on('consumer-resume', async (consumerId) => {
+                    const consumer = room.getConsumerById(consumerId).consumerObj
                     await consumer.resume();
                 });
             
@@ -238,6 +192,19 @@ export default function signaling(server) {
     socket.on('join-room', (roomId) => {
         console.log(roomId);
     });
+
+    socket.on('NewProducerJoined', ({id}) => {
+        socket.broadcast.emit('NewProducerJoined', {id, socketId: socket.id});
+    })
+
+    socket.on('getProducers', async (roomId, callback) => {
+        const room = await manageRooms.getOrCreateRoom(roomId);
+        const clientProducer = room.getProducerBySocketId(socket.id)
+        const availableProducers = room.getProducers().filter((producer) => {
+            return producer.id !== clientProducer.id;
+        });
+        callback(availableProducers)
+    })
   })
 
   return io;
