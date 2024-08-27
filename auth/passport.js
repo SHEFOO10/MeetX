@@ -5,6 +5,7 @@ import google from './google';
 
 passport.use(new LocalStrategy(
     async(username, password, done) => {
+	console.log(username, password);
         try {
             const user = await User.findOne({username});
             if (!user || !user.comparePassword(password)) {

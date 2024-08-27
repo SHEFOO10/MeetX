@@ -42,7 +42,7 @@ async function createWebRtcTransport(router) {
         listenIps: [
           {
             ip: '0.0.0.0', // replace with relevant IP address
-            announcedIp: '192.168.1.9',
+            announcedIp: '54.157.178.254',
           }
         ],
         enableUdp: true,
@@ -80,6 +80,13 @@ async function createRoom (roomName, socketId) {
       mimeType: 'audio/opus',
       clockRate: 48000,
       channels: 2,
+      parameters: {
+	'maxplaybackrate': 48000,
+	'stereo': 1,
+	'sprop-stereo': 1,
+	'usedtx': 1, // Enable discontinuous transmission if supported
+	'maxaveragebitrate': 128000, // Set to a higher value to maintain quality
+	},
     },
     {
       kind: 'video',

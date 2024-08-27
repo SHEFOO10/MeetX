@@ -7,9 +7,9 @@ const roomName = roomInput.value;
 
 const socket = io("/mediasoup")
 
-socket.on('connection-success', ({ socketId }) => {
+socket.on('connection-success', async ({ socketId }) => {
   console.log(socketId)
-  getLocalStream()
+  await getLocalStream()
 })
 
 let device;
@@ -78,28 +78,29 @@ const joinRoom = () => {
   })
 }
 
-const getLocalStream = () => {
-  // navigator.mediaDevices.getUserMedia({
-  //   audio: true,
-  //   video: {
-  //     width: {
-  //       min: 640,
-  //       max: 1920,
-  //     },
-  //     height: {
-  //       min: 400,
-  //       max: 1080,
-  //     }
-  //   }
-  // })
-  navigator.mediaDevices.getDisplayMedia({
-    audio: true,
-    video: true
-  })
-  .then(streamSuccess)
-  .catch(error => {
-    console.log(error.message)
-  })
+const getLocalStream = async () => {
+  let localStream;
+  try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+ 	audio: true,
+  	video: {
+ 	  width: {
+	    min: 640,
+	    max: 1920,
+	  },
+  	  height: {
+	    min: 400,
+	    max: 1080,
+	  }
+	}
+     })
+  } catch (e) {
+    localStream = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+      video: true
+    })
+  }
+  streamSuccess(localStream);
 }
 
 // A device is an endpoint connecting to a Router on the

@@ -7,7 +7,7 @@
         "test": "echo \"Error: no test specified\" && exit 1",
         "lint": "eslint",
         "nodemon": "nodemon --exec babel-node",
-        "start": "npm run nodemon",
+        "start": "./kill_process_if443inuse.sh && npm run nodemon",
         "watch": "watchify ./public/index.js -o ./public/bundle.js"
     },
     "author": "SHEFOO10",

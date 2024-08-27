@@ -35,7 +35,7 @@ class Room {
     async createWebRtcTransport() {
       const transport = await this.router.createWebRtcTransport({
         listenIps: [{ ip: '0.0.0.0',
-           announcedIp: 'upgraded-space-happiness-x4xvp9q7v9r2997j-5000.app.github.dev'
+           announcedIp: '54.157.178.254'
            }], // Replace with your server's public IP
         enableUdp: true,
         enableTcp: true,

@@ -8,9 +8,11 @@ import routes from './routes';
 import RedisClient from './utils/redis';
 import { checkDB, checkRedis } from './utils/helper';
 import path from 'path';
-import http from 'http';
+import https from 'https';
 import bodyParser from 'body-parser';
 import signaling from './signaling';
+import fs from 'fs';
+import cors from 'cors';
 
 const __dirname = path.resolve();
 
@@ -21,13 +23,22 @@ const {
   SESSION_SECRET = 'your-session-secret'
 } = process.env;
 
+const privKey = fs.readFileSync('/etc/letsencrypt/live/api.shefoo.tech/privkey.pem', 'utf-8');
+const cert = fs.readFileSync('/etc/letsencrypt/live/api.shefoo.tech/fullchain.pem', 'utf-8');
+
+const credentials = { key: privKey, cert};
+
 const app = express();
-const httpServer = http.createServer(app);
-const socket = signaling(httpServer);
+const httpsServer = https.createServer(credentials, app);
+const socket = signaling(httpsServer);
 
 app.set('view engine', 'ejs');
 
 app.use(bodyParser.json());
+app.use(cors({
+	origin: 'https://shefoo.tech',
+	credentials: true
+}));
 
 //support parsing of application/x-www-form-urlencoded post data
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -50,7 +61,12 @@ app.use(express.static(path.join(__dirname, '/public')));
         prefix: "meetX:",
       }),
       secret: SESSION_SECRET, // Replace with a secure secret
-      cookie: { secure: false }, // Ensure HTTPS is used, or set to false during development
+      cookie: {
+	httpOnly: true,
+	secure: true,
+	domain: '.shefoo.tech',
+	sameSite: 'None',
+      }, // Ensure HTTPS is used, or set to false during development
       resave: false,
       saveUninitialized: false
     }));
@@ -73,7 +89,7 @@ app.use(express.static(path.join(__dirname, '/public')));
     console.error("Error during server initialization:", error);
   }
 })();
-httpServer.listen(PORT, () => {
+httpsServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
